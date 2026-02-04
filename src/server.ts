@@ -61,6 +61,28 @@ app.get('/posts/:id', async (req: Request, res: Response) => {
   res.status(200).json({ post });
 });
 
+//PUT update post
+app.put('/posts/:id', async (req: Request, res: Response) => {
+  const id = req.params.id;
+  const { title, content, published } = req.body;
+
+  const updatedPost = await prisma.post.update({
+    where: { id: Number(id) },
+    data: { title, content, published },
+  });
+
+  res.status(200).json(updatedPost);
+});
+
+//DELETE post
+app.delete('/posts/:id', async (req: Request, res: Response) => {
+  const id = req.params.id;
+
+  await prisma.post.delete({ where: { id: Number(id) } });
+
+  res.status(204).end;
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
