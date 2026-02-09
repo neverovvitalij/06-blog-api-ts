@@ -231,6 +231,66 @@ app.post('/tags', async (req: Request, res: Response) => {
   }
 });
 
+//PUT Add Category to the Post
+app.put('/posts/:id/categories', async (req: Request, res: Response) => {
+  const { categoryIds } = req.body;
+  const postId = req.params.id;
+
+  const connectData = categoryIds.map((id: number) => ({ id: Number(id) }));
+
+  try {
+    const post = await prisma.post.update({
+      where: { id: Number(postId) },
+      data: {
+        categories: { connect: connectData },
+      },
+      include: { categories: true },
+    });
+
+    res.status(200).json({ post });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2025'
+    ) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//PUT Add Tag to the Post
+app.put('/posts/:id/tags', async (req: Request, res: Response) => {
+  const postId = req.params.id;
+  const { tagIds } = req.body;
+
+  const connectData = tagIds.map((id: number) => ({ id: Number(id) }));
+
+  try {
+    const post = await prisma.post.update({
+      where: { id: Number(postId) },
+      data: {
+        tags: { connect: connectData },
+      },
+      include: { tags: true },
+    });
+
+    res.status(200).json({ post });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2025'
+    ) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
