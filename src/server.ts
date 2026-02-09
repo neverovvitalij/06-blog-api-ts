@@ -144,6 +144,93 @@ app.delete('/posts/:id', async (req: Request, res: Response) => {
   }
 });
 
+//POST Add Comment to Post
+app.post('/posts/:id/comments', async (req: Request, res: Response) => {
+  const { text, authorId } = req.body;
+  const { id } = req.params;
+
+  try {
+    const comment = await prisma.comment.create({
+      data: {
+        text,
+        postId: Number(id),
+        authorId: Number(authorId),
+      },
+      include: { author: true },
+    });
+
+    res.status(201).json({ comment });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2003'
+    ) {
+      return res.status(404).json({ error: 'Post or author not found' });
+    }
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//GET get all Posts from Comment
+app.get('/posts/:id/comments', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const comments = await prisma.comment.findMany({
+      where: { postId: Number(id) },
+      include: { author: true },
+    });
+
+    res.status(200).json({ comments });
+  } catch (error) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//POST Add Category
+app.post('/categories', async (req: Request, res: Response) => {
+  const { name } = req.body;
+
+  try {
+    const category = await prisma.category.create({ data: { name } });
+
+    res.status(201).json({ category });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2002'
+    ) {
+      return res.status(409).json({ error: 'Category already exists' });
+    }
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//POST Add Tag
+app.post('/tags', async (req: Request, res: Response) => {
+  const { name } = req.body;
+
+  try {
+    const tag = await prisma.tag.create({ data: { name } });
+
+    res.status(201).json({ tag });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2002'
+    ) {
+      return res.status(409).json({ error: 'Tag already exists' });
+    }
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
