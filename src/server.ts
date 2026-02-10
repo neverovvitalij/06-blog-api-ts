@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 const PORT = 3000;
 const app = express();
@@ -7,14 +7,39 @@ const prisma = new PrismaClient();
 
 app.use(express.json());
 
-//GET all users
-app.get('/users', async (req: Request, res: Response) => {
-  try {
-    const users = await prisma.user.findMany({ include: { posts: true } });
+//GET Posts by Category,Tag and Published
+app.get('/posts', async (req: Request, res: Response) => {
+  const { category, tag, published } = req.query as {
+    category?: string;
+    tag?: string;
+    published?: string;
+  };
 
-    res.status(200).json({ users });
+  try {
+    const where: Prisma.PostWhereInput = {};
+
+    if (category) {
+      where.categories = {
+        some: { name: category },
+      };
+    }
+    if (tag) {
+      where.tags = {
+        some: { name: tag },
+      };
+    }
+    if (published) {
+      where.published = published === 'true';
+    }
+
+    const posts = await prisma.post.findMany({
+      where,
+      include: { author: true, categories: true, tags: true },
+    });
+
+    res.status(200).json({ posts });
   } catch (error) {
-    res.status(500).json({ error: 'Server Error' });
+    res.status(500).json('Server Error');
   }
 });
 
