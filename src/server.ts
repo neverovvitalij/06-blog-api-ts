@@ -9,11 +9,16 @@ app.use(express.json());
 
 //GET Posts by Category,Tag and Published
 app.get('/posts', async (req: Request, res: Response) => {
-  const { category, tag, published } = req.query as {
+  const { category, tag, published, page, limit } = req.query as {
     category?: string;
     tag?: string;
     published?: string;
+    page?: string;
+    limit?: string;
   };
+
+  const currentPage = Number(page) || 1;
+  const currentLimit = Number(limit) || 10;
 
   try {
     const where: Prisma.PostWhereInput = {};
@@ -33,13 +38,26 @@ app.get('/posts', async (req: Request, res: Response) => {
     }
 
     const posts = await prisma.post.findMany({
+      skip: (currentPage - 1) * currentLimit,
+      take: currentLimit,
       where,
       include: { author: true, categories: true, tags: true },
     });
 
-    res.status(200).json({ posts });
+    const total = await prisma.post.count({ where });
+    const totalPages = Math.ceil(total / currentLimit);
+
+    res.status(200).json({
+      posts: posts,
+      pagination: {
+        page: currentPage,
+        limit: currentLimit,
+        total: total,
+        totalPages: totalPages,
+      },
+    });
   } catch (error) {
-    res.status(500).json('Server Error');
+    res.status(500).json({ error: 'Server Error' });
   }
 });
 
