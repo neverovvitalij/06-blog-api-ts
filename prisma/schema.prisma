@@ -34,6 +34,7 @@ model Post {
   comments    Comment[]
   categories  Category[]
   tags        Tag[]
+  deletedAt   DateTime?
 }
 
 // Comment model

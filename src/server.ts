@@ -21,7 +21,7 @@ app.get('/posts', async (req: Request, res: Response) => {
   const currentLimit = Number(limit) || 10;
 
   try {
-    const where: Prisma.PostWhereInput = {};
+    const where: Prisma.PostWhereInput = { deletedAt: null };
 
     if (category) {
       where.categories = {
@@ -171,7 +171,10 @@ app.put('/posts/:id', async (req: Request, res: Response) => {
 app.delete('/posts/:id', async (req: Request, res: Response) => {
   const id = req.params.id;
   try {
-    await prisma.post.delete({ where: { id: Number(id) } });
+    await prisma.post.update({
+      where: { id: Number(id) },
+      data: { deletedAt: new Date() },
+    });
 
     res.status(204).end();
   } catch (error) {
