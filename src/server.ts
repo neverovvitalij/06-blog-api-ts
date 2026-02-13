@@ -119,6 +119,46 @@ app.post('/posts', async (req: Request, res: Response) => {
   }
 });
 
+//POST create Post with Category
+app.post('/posts/with-categories', async (req: Request, res: Response) => {
+  const { title, content, authorId, categoryIds } = req.body;
+  const connectData = categoryIds.map((id: number) => ({ id: Number(id) }));
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const post = await tx.post.create({
+        data: {
+          title,
+          content,
+          authorId: Number(authorId),
+        },
+      });
+
+      await tx.post.update({
+        where: { id: post.id },
+        data: {
+          categories: { connect: connectData },
+        },
+        include: { categories: true },
+      });
+
+      return post;
+    });
+
+    res.status(201).json({ result });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2003'
+    ) {
+      return res.status(404).json({ error: 'Author not found' });
+    }
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
 //GET post with Id
 app.get('/posts/:id', async (req: Request, res: Response) => {
   const id = req.params.id;
