@@ -6,26 +6,25 @@ async function main() {
   // Создать пользователя
   const user = await prisma.user.create({
     data: {
-      email: 'testOW@test.com',
+      email: 'testOW2@test.com',
       name: 'Test User',
     },
   });
 
   console.log('Created user:', user.id);
 
-  // Создать 30 постов
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 1; i <= 1000; i++) {
     await prisma.post.create({
       data: {
         title: `Test Post ${i}`,
-        content: `This is content for post number ${i}`,
-        published: i % 2 === 0, // чётные опубликованы
+        content: `Content ${i}`,
+        published: i % 2 === 0,
         authorId: user.id,
       },
     });
   }
 
-  console.log('Created 30 posts!');
+  console.log('Created 1000 posts!');
 }
 
 main()
