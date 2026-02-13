@@ -92,6 +92,32 @@ app.get('/posts', async (req: Request, res: Response) => {
   }
 });
 
+//GET post search
+app.get('/posts/search', async (req: Request, res: Response) => {
+  const query = req.query.q as string | undefined;
+
+  if (!query) {
+    return res.status(400).json({ error: 'Query parameter q is required' });
+  }
+
+  try {
+    const posts = await prisma.post.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { content: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      include: { author: true },
+    });
+
+    res.status(200).json({ posts });
+  } catch (error) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
 //POST create post
 app.post('/posts', async (req: Request, res: Response) => {
   const { title, content, authorId } = req.body;
