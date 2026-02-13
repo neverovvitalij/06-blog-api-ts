@@ -35,6 +35,11 @@ model Post {
   categories  Category[]
   tags        Tag[]
   deletedAt   DateTime?
+
+  @@index([createdAt])
+  @@index([authorId])
+  @@index([published])
+  @@index([deletedAt])
 }
 
 // Comment model
