@@ -36,6 +36,7 @@ model Post {
   tags        Tag[]
   deletedAt   DateTime?
 
+  @@unique([title, authorId])
   @@index([createdAt])
   @@index([authorId])
   @@index([published])

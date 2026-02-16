@@ -141,6 +141,13 @@ app.post('/posts', async (req: Request, res: Response) => {
     ) {
       return res.status(404).json({ error: 'Author not found' });
     }
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return res.status(409).json({
+          error: 'Post with this title already exists for this author',
+        });
+      }
+    }
     res.status(500).json({ error: 'Server Error' });
   }
 });
