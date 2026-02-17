@@ -25,6 +25,7 @@ model User {
 model Post {
   id          Int      @id @default(autoincrement())
   title       String
+  slug        String   @unique
   content     String?
   published   Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -41,6 +42,7 @@ model Post {
   @@index([authorId])
   @@index([published])
   @@index([deletedAt])
+  @@index([slug])
 }
 
 // Comment model

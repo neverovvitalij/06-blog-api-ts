@@ -1,11 +1,97 @@
 import express, { Request, Response } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { slugify } from './utils/slugify';
 
 const PORT = 3000;
 const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
+
+//GET post search
+app.get('/posts/search', async (req: Request, res: Response) => {
+  const query = req.query.q as string | undefined;
+
+  if (!query) {
+    return res.status(400).json({ error: 'Query parameter q is required' });
+  }
+
+  try {
+    const posts = await prisma.post.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { content: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      include: { author: true },
+    });
+
+    res.status(200).json({ posts });
+  } catch (error) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//GET get Post by slug
+app.get('/posts/slug/:slug', async (req: Request, res: Response) => {
+  const slug = req.params.slug as string;
+
+  try {
+    const post = await prisma.post.findUnique({
+      where: { slug },
+      include: { author: true, categories: true, tags: true },
+    });
+
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    res.status(200).json({ post });
+  } catch (error) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//GET get all Posts from Comment
+app.get('/posts/:id/comments', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const comments = await prisma.comment.findMany({
+      where: { postId: Number(id) },
+      include: { author: true },
+    });
+
+    res.status(200).json({ comments });
+  } catch (error) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+//GET post with Id
+app.get('/posts/:id', async (req: Request, res: Response) => {
+  const id = req.params.id;
+
+  try {
+    const post = await prisma.post.findUnique({
+      where: {
+        id: Number(id),
+      },
+      include: {
+        author: true,
+      },
+    });
+
+    if (post === null) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.status(200).json({ post });
+  } catch (error) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
 
 //GET Posts by Category,Tag and Published
 app.get('/posts', async (req: Request, res: Response) => {
@@ -69,50 +155,40 @@ app.post('/users', async (req: Request, res: Response) => {
 
     res.status(201).json({ user });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2002'
-    ) {
-      return res.status(409).json({ error: 'Email already exists' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return res.status(409).json({ error: 'Email already exists' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
 });
 
-//GET posts
-app.get('/posts', async (req: Request, res: Response) => {
-  try {
-    const posts = await prisma.post.findMany({ include: { author: true } });
+//GET get all users
+app.get('/users', async (req: Request, res: Response) => {
+  const { page, limit } = req.query as { page?: string; limit?: string };
 
-    res.status(200).json({ posts });
-  } catch (error) {
-    res.status(500).json({ error: 'Server Error' });
-  }
-});
-
-//GET post search
-app.get('/posts/search', async (req: Request, res: Response) => {
-  const query = req.query.q as string | undefined;
-
-  if (!query) {
-    return res.status(400).json({ error: 'Query parameter q is required' });
-  }
+  const currentPage = Number(page) || 1;
+  const currentLimit = Number(limit) || 10;
 
   try {
-    const posts = await prisma.post.findMany({
-      where: {
-        deletedAt: null,
-        OR: [
-          { title: { contains: query, mode: 'insensitive' } },
-          { content: { contains: query, mode: 'insensitive' } },
-        ],
-      },
-      include: { author: true },
+    const users = await prisma.user.findMany({
+      skip: (currentPage - 1) * currentLimit,
+      take: currentLimit,
     });
 
-    res.status(200).json({ posts });
+    const total = await prisma.user.count();
+    const totalPages = Math.ceil(total / currentLimit);
+
+    res.status(200).json({
+      users: users,
+      pagination: {
+        page: currentPage,
+        limit: currentLimit,
+        total: total,
+        totalPages: totalPages,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: 'Server Error' });
   }
@@ -123,9 +199,12 @@ app.post('/posts', async (req: Request, res: Response) => {
   const { title, content, authorId } = req.body;
 
   try {
+    const slug = slugify(title);
+
     const post = await prisma.post.create({
       data: {
         title,
+        slug,
         content,
         authorId: Number(authorId),
       },
@@ -133,19 +212,14 @@ app.post('/posts', async (req: Request, res: Response) => {
 
     res.status(201).json({ post });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2003'
-    ) {
-      return res.status(404).json({ error: 'Author not found' });
-    }
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
         return res.status(409).json({
           error: 'Post with this title already exists for this author',
         });
+      }
+      if (error.code === 'P2003') {
+        return res.status(404).json({ error: 'Author not found' });
       }
     }
     res.status(500).json({ error: 'Server Error' });
@@ -158,10 +232,13 @@ app.post('/posts/with-categories', async (req: Request, res: Response) => {
   const connectData = categoryIds.map((id: number) => ({ id: Number(id) }));
 
   try {
+    const slug = slugify(title);
+
     const result = await prisma.$transaction(async (tx) => {
       const post = await tx.post.create({
         data: {
           title,
+          slug,
           content,
           authorId: Number(authorId),
         },
@@ -180,37 +257,11 @@ app.post('/posts/with-categories', async (req: Request, res: Response) => {
 
     res.status(201).json({ result });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2003'
-    ) {
-      return res.status(404).json({ error: 'Author not found' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2003') {
+        return res.status(404).json({ error: 'Author not found' });
+      }
     }
-    res.status(500).json({ error: 'Server Error' });
-  }
-});
-
-//GET post with Id
-app.get('/posts/:id', async (req: Request, res: Response) => {
-  const id = req.params.id;
-
-  try {
-    const post = await prisma.post.findUnique({
-      where: {
-        id: Number(id),
-      },
-      include: {
-        author: true,
-      },
-    });
-
-    if (post === null) {
-      return res.status(404).json({ error: 'Post not found' });
-    }
-    res.status(200).json({ post });
-  } catch (error) {
     res.status(500).json({ error: 'Server Error' });
   }
 });
@@ -221,20 +272,23 @@ app.put('/posts/:id', async (req: Request, res: Response) => {
   const { title, content, published } = req.body;
 
   try {
+    const data: Prisma.PostUpdateInput = { content, published };
+
+    if (title) {
+      data.title = title;
+      data.slug = slugify(title);
+    }
     const updatedPost = await prisma.post.update({
       where: { id: Number(id) },
-      data: { title, content, published },
+      data,
     });
 
     res.status(200).json(updatedPost);
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2025'
-    ) {
-      return res.status(404).json({ error: 'Post not found' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        return res.status(404).json({ error: 'Post not found' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
@@ -251,13 +305,10 @@ app.delete('/posts/:id', async (req: Request, res: Response) => {
 
     res.status(204).end();
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2025'
-    ) {
-      return res.status(404).json({ error: 'Post not found' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        return res.status(404).json({ error: 'Post not found' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
@@ -280,30 +331,11 @@ app.post('/posts/:id/comments', async (req: Request, res: Response) => {
 
     res.status(201).json({ comment });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2003'
-    ) {
-      return res.status(404).json({ error: 'Post or author not found' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2003') {
+        return res.status(404).json({ error: 'Post or author not found' });
+      }
     }
-    res.status(500).json({ error: 'Server Error' });
-  }
-});
-
-//GET get all Posts from Comment
-app.get('/posts/:id/comments', async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  try {
-    const comments = await prisma.comment.findMany({
-      where: { postId: Number(id) },
-      include: { author: true },
-    });
-
-    res.status(200).json({ comments });
-  } catch (error) {
     res.status(500).json({ error: 'Server Error' });
   }
 });
@@ -317,13 +349,10 @@ app.post('/categories', async (req: Request, res: Response) => {
 
     res.status(201).json({ category });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2002'
-    ) {
-      return res.status(409).json({ error: 'Category already exists' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return res.status(409).json({ error: 'Category already exists' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
@@ -338,13 +367,10 @@ app.post('/tags', async (req: Request, res: Response) => {
 
     res.status(201).json({ tag });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2002'
-    ) {
-      return res.status(409).json({ error: 'Tag already exists' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return res.status(409).json({ error: 'Tag already exists' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
@@ -368,13 +394,10 @@ app.put('/posts/:id/categories', async (req: Request, res: Response) => {
 
     res.status(200).json({ post });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2025'
-    ) {
-      return res.status(404).json({ error: 'Post not found' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        return res.status(404).json({ error: 'Post not found' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
@@ -398,13 +421,10 @@ app.put('/posts/:id/tags', async (req: Request, res: Response) => {
 
     res.status(200).json({ post });
   } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      error.code === 'P2025'
-    ) {
-      return res.status(404).json({ error: 'Post not found' });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        return res.status(404).json({ error: 'Post not found' });
+      }
     }
     res.status(500).json({ error: 'Server Error' });
   }
